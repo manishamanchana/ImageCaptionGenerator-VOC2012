@@ -1,7 +1,19 @@
+# Python
 __pycache__/
-*.pt
-*.pth
-*.h5
-*.ipynb_checkpoints/
-data/
-outputs/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+env/
+*.env
+.caption_env
+
+# VS Code
+.vscode/
+
+# Data directories (DO NOT UPLOAD VOC DATA)
+data/*
+
+# But allow processed folder
+!data/processed/
