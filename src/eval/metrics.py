@@ -49,7 +49,15 @@ def compute_bleu4(pred: str, ref: str) -> float:
 
 # METEOR
 def compute_meteor(pred: str, ref: str) -> float:
-    return meteor_score([normalize_caption(ref)], normalize_caption(pred))
+    # tokenized versions for NLTK's meteor_score
+    pred_tokens = tokenize_caption(pred)
+    ref_tokens = tokenize_caption(ref)
+
+    if not pred_tokens or not ref_tokens:
+        return 0.0
+
+    # meteor_score expects: list_of_references (each a list of tokens), hypothesis_tokens
+    return meteor_score([ref_tokens], pred_tokens)
 
 # ROUGE-L
 def lcs(a, b):

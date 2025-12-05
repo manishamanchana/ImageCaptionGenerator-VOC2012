@@ -17,3 +17,7 @@ data/*
 
 # But allow processed folder
 !data/processed/
+
+# Don't upload model weights
+checkpoints/
+*.pt
