@@ -21,3 +21,5 @@ data/*
 # Don't upload model weights
 checkpoints/
 *.pt
+
+misc.txt
