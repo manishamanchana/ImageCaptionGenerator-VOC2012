@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from .metrics import compute_all_metrics, normalize_caption
 
 def evaluate_dataset(predictions_path: str, ground_truth_path: str):
@@ -46,8 +47,12 @@ def evaluate_dataset(predictions_path: str, ground_truth_path: str):
 
 if __name__ == "__main__":
     # Example usage
+    """Windows usage
     preds_file = ""# place our predictions file path here#
     gts_file = r"data\processed\captions.json"
+    """
+    preds_file = ""  # TODO: put prediction file path here - will do it after finishing wp3 and wp4   s
+    gts_file = Path("data/processed/captions.json")
 
     scores = evaluate_dataset(preds_file, gts_file)
     print(scores)
