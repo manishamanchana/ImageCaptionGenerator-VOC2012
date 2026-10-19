@@ -203,19 +203,21 @@ ImageCaptionGenerator-VOC2012/
 git clone --depth 1 https://github.com/manishamanchana/ImageCaptionGenerator-VOC2012.git
 cd ImageCaptionGenerator-VOC2012
 
-python3.10 -m venv .venv
+python3.12 -m venv .venv         # any Python 3.10–3.12; PyTorch 2.3.1 has no wheels for 3.13+
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
-Developed and tested with Python 3.10 and PyTorch 2.3.1. `--depth 1` skips older history, which still contains large model checkpoints.
+Tested with Python 3.10 and 3.12 and PyTorch 2.3.1; a fresh clone reproduces the reported scores exactly. `--depth 1` skips older history, which still contains large model checkpoints.
 
 Download the NLTK data used for tokenization and METEOR:
 
 ```bash
 python -c "import nltk; [nltk.download(p) for p in ['punkt', 'punkt_tab', 'wordnet', 'omw-1.4']]"
 ```
+
+On macOS with the python.org installer, if this fails with `CERTIFICATE_VERIFY_FAILED`, run `pip install certifi` and put `SSL_CERT_FILE=$(python -c "import certifi; print(certifi.where())")` in front of the command.
 
 A GPU is used automatically if available; training also runs on CPU, just more slowly.
 
@@ -273,6 +275,8 @@ python -m src.eval.evaluate
 # Template-independent accuracy + blind baseline
 python -m src.eval.task_metrics
 ```
+
+To check the reported scores straight after cloning (no dataset, weights or GPU needed), run just the last two commands.
 
 Steps 1 and 2 are optional if you keep the committed files in `data/processed/`. Because template selection is seeded and files are processed in sorted order, regenerating captions reproduces the same output.
 
