@@ -23,3 +23,11 @@ checkpoints/
 *.pt
 
 misc.txt
+
+# macOS
+.DS_Store
+
+# Course deliverables (kept locally, not in the repo)
+*.pptx
+*.docx
+report+PPT/
