@@ -17,6 +17,32 @@ Evaluated on the VOC 2012 **validation split** with greedy decoding, using the b
 | METEOR  | 0.554 |
 | ROUGE-L | 0.519 |
 
+### What these numbers mean
+
+The reference captions are templated, so a large share of every caption ("the image contains", "in the scene") is shared across images. To separate real visual recognition from template overlap, predictions are also compared against a **blind baseline** that outputs the same caption for every image, and scored on **template-independent accuracy** (the objects and counts named, ignoring which template was used):
+
+| | BLEU-1 | BLEU-4 | METEOR | ROUGE-L |
+|---|---|---|---|---|
+| Blind baseline (always *"one person in the scene"*) | 0.461 | 0.166 | 0.433 | 0.514 |
+| **This model** | **0.547** | **0.269** | **0.554** | **0.519** |
+
+| Template-independent accuracy | Score |
+|---|---|
+| Right set of object classes | 50.2% |
+| Right classes **and** right counts | 36.1% |
+
+Takeaways:
+
+- **ROUGE-L is close to uninformative here:** the blind baseline nearly matches the model, because template words dominate the overlap.
+- **The model does recognize objects**, but **counting is the weak point.** It names the right classes for half the images, yet gets the counts right for only about a third.
+- Even a perfect recognizer would be penalized whenever its template differs from the randomly chosen reference, so these metrics can't approach 1.0.
+
+Reproduce these numbers with `python -m src.eval.task_metrics`.
+
+**Reproducibility:** re-running `inference.py` from the saved checkpoint on CPU (October 2026) reproduces all four metrics within 0.0012. 28 of 1,449 greedy-decoded captions differ, from near-tie argmax flips caused by floating-point differences. The committed `predictions_val.json` is the original run.
+
+![Example validation predictions](figures/example_captions_grid.png)
+
 ### Sample predictions (validation set)
 
 | Image ID | Ground truth (synthetic) | Model prediction | Notes |
@@ -112,6 +138,12 @@ Linear 512 → 71                                      → next-token logits
 | Learning rate | 1e-3 |
 | Max decode length | 20 |
 
+Validation loss improved every epoch through epoch 4 (best: **0.687**), and epoch 5 did not improve on it, so `best_epoch4.pt` is the final model.
+
+![Training and validation loss](figures/training_curve.png)
+
+*Loss values were transcribed from the training console output; epoch 5's validation loss was not recorded.*
+
 ### 5. Evaluation (`src/eval/`)
 
 Predictions and references are lowercased, stripped of punctuation, and whitespace-normalized, then scored per image and averaged over all images present in both files:
@@ -122,12 +154,14 @@ Predictions and references are lowercased, stripped of punctuation, and whitespa
 
 Each image has a single reference caption.
 
+`task_metrics.py` adds template-independent scoring. It strips the template from each caption, parses the object phrase back into classes and counts, and compares predictions to references on (a) the class set and (b) classes plus counts. It also scores the blind baseline with the same four metrics.
+
 ---
 
 ## Project structure
 
 ```
-ImageCaptionProject/
+ImageCaptionGenerator-VOC2012/
 ├── data/
 │   ├── train/ val/ test/ trainval/   # VOC 2012 images + annotations (not committed)
 │   │   ├── img/                      #   <image_id>.jpg
@@ -149,9 +183,13 @@ ImageCaptionProject/
 │   │   └── vocab_builder.py          # captions → vocabulary
 │   └── eval/
 │       ├── metrics.py                # BLEU, METEOR, ROUGE-L
-│       └── evaluate.py               # dataset-level scoring
+│       ├── evaluate.py               # dataset-level scoring
+│       └── task_metrics.py           # object/count accuracy + blind baseline
+├── scripts/                          # figure generation (class distribution, word frequency, examples, loss curve)
+├── figures/                          # generated figures used in this README
 ├── train.py                          # training loop
 ├── inference.py                      # caption generation + evaluation
+├── requirements.txt
 └── README.md
 ```
 
@@ -162,14 +200,16 @@ ImageCaptionProject/
 ### 1. Environment
 
 ```bash
-git clone <your-repo-url>
-cd ImageCaptionProject
+git clone --depth 1 https://github.com/manishamanchana/ImageCaptionGenerator-VOC2012.git
+cd ImageCaptionGenerator-VOC2012
 
-python -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-pip install torch torchvision pillow nltk tqdm
+pip install -r requirements.txt
 ```
+
+Developed and tested with Python 3.10 and PyTorch 2.3.1. `--depth 1` skips older history, which still contains large model checkpoints.
 
 Download the NLTK data used for tokenization and METEOR:
 
@@ -203,6 +243,10 @@ data/val/ann/...
 
 Raw data and checkpoints are excluded by `.gitignore`; only `data/processed/` is committed.
 
+### 3. Model weights
+
+Trained weights are **not included** in the repository (each checkpoint is about 99 MB). To run inference, first train with `python train.py`, which writes `checkpoints/best_epoch{N}.pt`. The evaluation scripts below work without weights, because they score the committed `predictions_val.json`.
+
 ---
 
 ## Usage
@@ -225,6 +269,9 @@ python inference.py
 
 # Re-score existing predictions without re-running the model
 python -m src.eval.evaluate
+
+# Template-independent accuracy + blind baseline
+python -m src.eval.task_metrics
 ```
 
 Steps 1 and 2 are optional if you keep the committed files in `data/processed/`. Because template selection is seeded and files are processed in sorted order, regenerating captions reproduces the same output.
@@ -237,6 +284,8 @@ Steps 1 and 2 are optional if you keep the committed files in `data/processed/`.
 - **Caption grammar quirks.** Pluralization just appends "s" (`buss`, `sheeps`), and the `are present in the scene` template is also applied to single objects (`one cat are present in the scene`). These errors are baked into the training targets, so the model reproduces them.
 - **Single random-template reference.** Each image has one reference caption with a randomly chosen template, so a prediction naming exactly the right objects with a different template (`in the image` vs. `in the scene`) is still penalized. The metrics therefore understate how well the model recognizes objects.
 - **"Frozen" backbone still updates BatchNorm statistics.** `encoder.train()` puts ResNet-50's BatchNorm layers in training mode, so their running mean and variance drift during training even though the weights are frozen. Calling `encoder.cnn.eval()` after `encoder.train()` would keep it a true fixed feature extractor.
+- **Counting is the main failure mode.** Global average pooling collapses ResNet's spatial grid into one vector, discarding where objects are. The model names the right classes on 50.2% of validation images but gets the counts right on only 36.1%.
+- **No separate test set.** VOC 2012 test annotations are withheld, so the validation split is used both to pick the best epoch and to report results. That makes the reported scores slightly optimistic. A cleaner setup would hold out part of the training split for model selection.
 - **Hard-coded configuration.** Hyperparameters, epochs, and the inference checkpoint path (`checkpoints/best_epoch4.pt`) are set directly in the scripts rather than via CLI arguments or a config file.
 
 ## Future work
@@ -252,7 +301,7 @@ Steps 1 and 2 are optional if you keep the committed files in `data/processed/`.
 
 ## Acknowledgments
 
-- Developed for **CS 673: Computer Vision** at the University of Alabama at Birmingham.
+- Developed as a four-person course project for **CS 673: Computer Vision** at the University of Alabama at Birmingham. I (Manisha Manchana) built the end-to-end pipeline: data processing, synthetic caption generation, vocabulary, encoder and decoder, training, inference, and the template-independent evaluation. I also integrated and fixed a teammate's BLEU/METEOR/ROUGE-L module.
 - **Pascal VOC 2012**: M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, A. Zisserman. *The PASCAL Visual Object Classes (VOC) Challenge.* International Journal of Computer Vision, 88(2), 303–338, 2010.
 - Dataset packaging in Supervisely JSON format by [DatasetNinja](https://github.com/dataset-ninja/pascal-voc-2012).
 - ResNet-50 ImageNet weights from `torchvision`.
